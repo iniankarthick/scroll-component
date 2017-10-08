@@ -1,0 +1,292 @@
+import ReactDOM from 'react-dom';
+import React from 'react';
+
+export default class ScrollComponent extends React.Component {
+    
+	constructor(props)
+	{
+		super(props);
+		let reaches = this.props.reaches || {};
+		let viewPort = this.props.viewPort || {};
+		
+		this.state = {
+				reachOptions : {
+				  selectors : reaches.selectors,
+				  distances : reaches.distances,
+				  callback : reaches.callback
+			  },
+			  viewPort : {
+				  selectors : viewPort.selectors,
+				  callback : viewPort.callback
+			  }
+		};
+		
+		this.lastScrollPoint = 0;
+		this.lastDistancePoint = { up : {} , down : {} };
+		this.lastSelectorPoint = { up : {} , down : {} };
+		this.lastViewPortPoint = { up : {} , down : {} };
+		this.lastStartScrollPoint = {}; 
+		
+		this.executeScrollEvents = this.executeScrollEvents.bind(this); //onScrollForward , onScrollBackward , onScrollCustomOptions
+		this.onScrollStart = this.onScrollStart.bind(this);
+		this.onScrollEnd = this.onScrollEnd.bind(this);
+		this.onScrollCustomOptions = this.onScrollCustomOptions.bind(this);
+		this.handleScrollEvents = this.handleScrollEvents.bind(this);
+		this.refreshScrollEvents = this.refreshScrollEvents.bind(this);
+		this.cancelScrollEvents = this.cancelScrollEvents.bind(this);
+		
+		this.getOffsetDimensionPoint = this.getOffsetDimensionPoint.bind(this);
+		this.getOffsetSidePoint = this.getOffsetSidePoint.bind(this)
+		this.getScrollSidePoint = this.getScrollSidePoint.bind(this);
+		this.getScrollDimensionPoint = this.getScrollDimensionPoint.bind(this);
+		this.getClientDimensionPoint = this.getClientDimensionPoint.bind(this);
+		this.isInViewPort = this.isInViewPort.bind(this);
+	}
+	
+	isInViewPort( scrollTag, elem )
+	{
+	     var contHeight = this.getClientDimensionPoint(scrollTag);
+	     var contTop = this.getScrollDimensionPoint(scrollTag);
+	     var contBottom = contTop + contHeight;
+
+	     var elemTop =  this.getOffsetSidePoint( elem ) - this.getOffsetSidePoint( scrollTag );
+	     var elemBottom = elemTop + this.getClientDimensionPoint(elem);
+
+	     var isTotal = (elemTop >= 0 && elemBottom <= contHeight);
+	    
+	     var isPart =false;
+	     if( !isTotal ){
+	    	   isPart = ((elemTop < 0 && elemBottom > 0 ) || (elemTop > 0 && elemTop <= contHeight));
+	     }
+	     
+	     return  { isTotal , isPart };
+	 }
+	 
+	onScrollCustomOptions( scrollTag , towards ){
+		
+		if( this.state.reachOptions && this.state.reachOptions.callback ){
+			
+			let reachSelectors =  this.state.reachOptions.selectors || [];
+			let reachOptionsCallback = this.state.reachOptions.callback;
+			let currentScrollPos = this.getScrollSidePoint( scrollTag )
+			
+			reachSelectors = reachSelectors.length ? scrollTag.querySelectorAll( reachSelectors.join(",") ) : [];
+			for(let i = 0; i < reachSelectors.length ;i++){
+				let reachNode = reachSelectors[i];
+				let offsetDimensionPoint = getOffsetDimensionPoint( reachNode )
+				if( towards == this.props.down && currentScrollPos >= offsetDimensionPoint  && !this.lastDistancePoint.down[reachNode] ){
+					
+					reachOptionsCallback( reachNode , towards , scrollTag  , towards);
+					this.lastSelectorPoint.down[reachNode] = true;
+					this.lastSelectorPoint.up = {};
+				}
+				else if( towards == this.props.up && currentScrollPos <= offsetDimensionPoint && !this.lastDistancePoint.up[reachNode] ){
+					
+					reachOptionsCallback( reachNode , towards , scrollTag );
+					this.lastSelectorPoint.up[reachNode] = true;
+					this.lastSelectorPoint.down={};
+				}
+			}
+			
+			//ranges in distance 100-500 , 400-600 ...later
+			let distances = this.state.reachOptions.distances || [];
+			for(let i = 0;i < distances.length ;i++) {
+				
+				let distance = parseInt( distances[i] );
+				if( towards == this.props.down && currentScrollPos >= distance  && !this.lastDistancePoint.down[distance] ){
+					
+					reachOptionsCallback( distance , towards , scrollTag );
+					this.lastDistancePoint.down[distance] = true;
+					this.lastDistancePoint.up = {};
+				}
+				else if( towards == this.props.up && currentScrollPos <= distance && !this.lastDistancePoint.up[distance] ){
+					
+					reachOptionsCallback( distance , towards , scrollTag );
+					this.lastDistancePoint.up[distance] = true;
+					this.lastDistancePoint.down={};
+				}
+			}
+			
+		}
+		
+		if( this.state.viewPort && this.state.viewPort.callback ){
+			
+			let viewSelectors =  this.state.viewPort.selectors || [];
+			viewSelectors = viewSelectors.length ? scrollTag.querySelectorAll( viewSelectors.join(",") ) : [];
+			
+			for(let i = 0; i < viewSelectors.length ;i++){
+				let reachNode = viewSelectors[i];
+				let viewPortObj = this.isInViewPort( scrollTag , reachNode );
+				
+				if( towards == this.props.down && (viewPortObj.isTotal || viewPortObj.isPart) && !reachNode.down ){
+					
+					this.state.viewPort.callback(reachNode, viewPortObj , towards , scrollTag);
+					reachNode.down = true;
+					reachNode.up = false;
+				}
+				else if( towards == this.props.up && (viewPortObj.isTotal || viewPortObj.isPart) && !reachNode.up ){
+					
+					this.state.viewPort.callback(reachNode, viewPortObj , towards , scrollTag);
+					reachNode.up = true;
+					reachNode.down = false;
+				}
+			}
+		}
+	}
+	
+	executeScrollEvents( scrollTag ){
+		
+		this.props.onScrollProcess && this.props.onScrollProcess( scrollTag );
+		
+		let scrollPointNow = this.getScrollSidePoint(scrollTag);
+		if (scrollPointNow > this.lastScrollPoint){
+			
+			this.onScrollStart( scrollTag ,this.props.down);
+			// downscroll code
+			this.props.onScrollForward && this.props.onScrollForward( scrollTag , scrollPointNow );
+			this.onScrollCustomOptions(scrollTag , this.props.down);
+			this.onScrollEnd( scrollTag , this.props.down);
+			
+		} else {
+			
+			// upscroll code
+			this.onScrollStart( scrollTag ,this.props.up);
+			this.props.onScrollBackward && this.props.onScrollBackward( scrollTag , scrollPointNow );
+			this.onScrollCustomOptions(scrollTag , this.props.up );
+			this.onScrollEnd( scrollTag , this.props.up);
+			
+		}
+		this.lastScrollPoint = scrollPointNow;
+		
+	}
+	
+	onScrollStart( scrollTag , towards ){
+		
+		let scrollSidePoint = this.getScrollSidePoint(scrollTag) ;
+		if( towards == this.props.down && scrollSidePoint > 1 && !this.lastStartScrollPoint.down ){
+			
+			this.props.onScrollStart && this.props.onScrollStart( scrollTag , towards );
+			this.lastStartScrollPoint.down = true;
+			this.lastStartScrollPoint.up = false;
+		}
+		else if( towards == this.props.up && scrollSidePoint < 1 && !this.lastStartScrollPoint.up ){
+			
+			this.props.onScrollStart && this.props.onScrollStart( scrollTag , towards );
+			this.lastStartScrollPoint.up = true;
+			this.lastStartScrollPoint.down = false;
+		}
+		
+	}
+	
+	onScrollEnd( scrollTag ){
+		
+		if( this.currentScrollPosition( scrollTag ) == this.getScrollDimensionPoint( scrollTag )  ){
+			this.props.onScrollEnd && this.props.onScrollEnd( scrollTag );
+		}
+		
+		//For document / window -- extra works
+		//(window.innerHeight + window.scrollY) >= document.body.offsetHeight)
+	}
+
+	currentScrollPosition( tag ){
+		return Math.ceil( this.getOffsetDimensionPoint(tag) + this.getScrollSidePoint(tag) );
+	}
+	
+	getOffsetSidePoint(tag){
+		var scrollViews= this.props[ this.props.type ];
+		return this.offsetSides(tag)["offset"+scrollViews.side];
+	}
+	
+	getOffsetDimensionPoint(tag){
+		var scrollViews= this.props[ this.props.type ];
+		return tag["offset"+scrollViews.dimension];
+	}
+	
+	getScrollSidePoint(tag){
+		var scrollViews = this.props[ this.props.type ];
+		return tag["scroll"+scrollViews.side];
+	}
+	
+	getScrollDimensionPoint(tag){
+		var scrollViews = this.props[ this.props.type ];
+		return tag["scroll"+scrollViews.dimension];
+	}
+	
+	getClientDimensionPoint(tag){
+		var scrollViews = this.props[ this.props.type ];
+		return tag["client"+scrollViews.dimension];
+	}
+	
+	isWindow( obj ) {
+	    return obj != null && obj === obj.window;
+	}
+
+	getWindow( elem ) {
+	    return this.isWindow( elem ) ? elem : elem.nodeType === 9 && elem.defaultView;
+	}
+
+	// taken from jquery
+	// @returns {{top: number, left: number}} 
+	offsetSides( elem ) {
+
+	    var docElem, win,
+	        box = { top: 0, left: 0 },
+	        doc = elem && elem.ownerDocument;
+
+	    docElem = doc.documentElement;
+
+	    if ( typeof elem.getBoundingClientRect !== typeof undefined ) {
+	        box = elem.getBoundingClientRect();
+	    }
+	    win = this.getWindow( doc );
+	    return {
+	        offsetTop: box.top + win.pageYOffset - docElem.clientTop,
+	        offsetLeft: box.left + win.pageXOffset - docElem.clientLeft
+	    };
+	};
+	
+	handleScrollEvents() {
+	  
+		let scrollTag = ReactDOM.findDOMNode(this);
+		this.executeScrollEvents( scrollTag );
+	}
+	
+	refreshScrollEvents(options){
+		let scrollTag = ReactDOM.findDOMNode(this);
+		this.cancelScrollEvents();
+		scrollTag.addEventListener('scroll', this.handleScrollEvents);
+	}
+	
+	cancelScrollEvents(){
+		let scrollTag =  ReactDOM.findDOMNode(this);
+		scrollTag.removeEventListener('scroll', this.handleScrollEvents);
+	}
+	
+	componentDidMount(){
+		this.refreshScrollEvents();
+	}
+	
+	componentWillUnmount() {
+		this.cancelScrollEvents();
+	}
+	
+    render() {
+
+    		// Get tag name from user...
+    		return (<div id={this.props.id} className={this.props.classNames} > {this.props.children}</div>)
+    }
+}
+
+ScrollComponent.defaultProps = {
+		"Vertical" : {
+			side : 'Top',
+			dimension : 'Height',
+		},
+		"Horizontal" : {
+			side : "Left" ,
+			dimension : 'Width'
+		},
+		type : "Vertical" ,
+		down : "Forward" ,
+		up : "Backward" 
+}
