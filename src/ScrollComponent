@@ -23,8 +23,6 @@ export default class ScrollComponent extends React.Component {
 		
 		this.lastScrollPoint = 0;
 		this.lastDistancePoint = { up : {} , down : {} };
-		this.lastSelectorPoint = { up : {} , down : {} };
-		this.lastViewPortPoint = { up : {} , down : {} };
 		this.lastStartScrollPoint = {}; 
 		
 		this.executeScrollEvents = this.executeScrollEvents.bind(this); //onScrollForward , onScrollBackward , onScrollCustomOptions
@@ -41,6 +39,7 @@ export default class ScrollComponent extends React.Component {
 		this.getScrollDimensionPoint = this.getScrollDimensionPoint.bind(this);
 		this.getClientDimensionPoint = this.getClientDimensionPoint.bind(this);
 		this.isInViewPort = this.isInViewPort.bind(this);
+		
 	}
 	
 	isInViewPort( scrollTag, elem )
@@ -74,17 +73,17 @@ export default class ScrollComponent extends React.Component {
 			for(let i = 0; i < reachSelectors.length ;i++){
 				let reachNode = reachSelectors[i];
 				let offsetDimensionPoint = getOffsetDimensionPoint( reachNode )
-				if( towards == this.props.down && currentScrollPos >= offsetDimensionPoint  && !this.lastDistancePoint.down[reachNode] ){
+				if( towards == this.props.down && currentScrollPos >= offsetDimensionPoint  && !reachNode.reachDown ){
 					
 					reachOptionsCallback( reachNode , towards , scrollTag  , towards);
-					this.lastSelectorPoint.down[reachNode] = true;
-					this.lastSelectorPoint.up = {};
+					reachNode.reachDown=true;
+					reachNode.reachUp=false;
 				}
-				else if( towards == this.props.up && currentScrollPos <= offsetDimensionPoint && !this.lastDistancePoint.up[reachNode] ){
+				else if( towards == this.props.up && currentScrollPos <= offsetDimensionPoint && !reachNode.reachUp ){
 					
 					reachOptionsCallback( reachNode , towards , scrollTag );
-					this.lastSelectorPoint.up[reachNode] = true;
-					this.lastSelectorPoint.down={};
+					reachNode.reachUp= true;
+					reachNode.reachDown=false;
 				}
 			}
 			
@@ -136,9 +135,9 @@ export default class ScrollComponent extends React.Component {
 	
 	executeScrollEvents( scrollTag ){
 		
-		this.props.onScrollProcess && this.props.onScrollProcess( scrollTag );
-		
 		let scrollPointNow = this.getScrollSidePoint(scrollTag);
+		this.props.onScrollProcess && this.props.onScrollProcess( scrollTag , scrollPointNow );
+		
 		if (scrollPointNow > this.lastScrollPoint){
 			
 			this.onScrollStart( scrollTag ,this.props.down);
